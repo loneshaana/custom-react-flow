@@ -1,14 +1,22 @@
 import * as React from "react";
 import styled from "styled-components";
-import { FlowChart } from "@mrblenny/react-flow-chart";
-import { Content, Page, Sidebar, SidebarItem } from "./components";
+import { FlowChart, PortWrapper } from "@mrblenny/react-flow-chart";
+import {
+  Content,
+  Page,
+  Sidebar,
+  SidebarItem,
+  Button,
+  Label
+} from "./components";
 import { chartSimple } from "./exampleChartState";
 import CustomPort from "./CustomPort";
 
 import * as actions from "./actions";
 import mapValues from "./utils/mapValues";
-
+import uuid from "uuid";
 import Select from "react-select";
+import _ from "lodash";
 
 const Message = styled.div`
   margin: 10px;
@@ -21,17 +29,32 @@ const Message = styled.div`
  * type -> DropDown of input / output
  * properties -> MultiSelect
  */
-const NODE_TYPE_OPTIONS = [
-  { label: "output", value: "OUTPUT" },
-  { label: "input", value: "INPUT" }
+const NODE_TYPES = {
+  OUTPUT: "output",
+  INPUT: "input"
+};
+const NODE_PROPERTY_VALUES = {
+  YES: "yes",
+  NO: "no"
+};
+const NODE_PROPERTIES = [
+  { type: "value", label: "yes", value: NODE_PROPERTY_VALUES.YES },
+  { type: "value", label: "no", value: NODE_PROPERTY_VALUES.NO }
 ];
-const AddPortsToSelectedItem = ({ selected, onChange }) => {
+const NODE_TYPE_OPTIONS = [
+  { label: "output", value: NODE_TYPES.OUTPUT },
+  { label: "input", value: NODE_TYPES.INPUT }
+];
+
+const AddPortsToSelectedItem = ({ selected, onChange, onSave }) => {
   if (!selected || !selected.id) return "";
   return (
     <React.Fragment>
       <Message>Add Ports To Selected Item</Message>
       <div style={{ marginLeft: "1rem", marginRight: "0.5rem" }}>
+        <Label>Node Type</Label>
         <Select
+          name="type"
           className="basic-single"
           classNamePrefix="select"
           isDisabled={false}
@@ -39,24 +62,98 @@ const AddPortsToSelectedItem = ({ selected, onChange }) => {
           isClearable={false}
           isRtl={false}
           isSearchable={true}
-          name="portType"
           options={NODE_TYPE_OPTIONS}
-          onChange={option => onChange(option.value, selected.id)}
+          onChange={(option, b) =>
+            onChange({ name: b.name, value: option.value }, selected.id)
+          }
+        />
+        <Label>Node Properties</Label>
+        <Select
+          name="properties"
+          options={NODE_PROPERTIES}
+          className="basic-multi-select"
+          classNamePrefix="select"
+          onChange={(option, b) =>
+            onChange(
+              { name: b.name, value: option.value, type: option.type },
+              selected.id
+            )
+          }
         />
       </div>
+      <Button onClick={onSave}>Save</Button>
     </React.Fragment>
   );
 };
 export class DragAndDropSidebar extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { ...chartSimple };
+    this.state = {
+      ...chartSimple,
+      newPort: {
+        nodeId: "",
+        type: "",
+        properties: {
+          position: {}
+        }
+      }
+    };
     this.config = {};
     this.stateActions = mapValues(actions, func => (...args) =>
       this.setState(func(...args))
     );
+    this.validatePortData = this.validatePortData.bind(this);
+    this.onPortSelect = this.onPortSelect.bind(this);
+    this.createPort = this.createPort.bind(this);
+    this.onPortSave = this.onPortSave.bind(this);
   }
-  onPortSelect(choosenPort, nodeId) {}
+
+  validatePortData() {
+    const { newPort } = this.state;
+    if (newPort.type === "" || newPort.nodeId === "") {
+      alert("Invalid Data");
+      return false;
+    }
+    return true;
+  }
+
+  createPort() {
+    const { type, nodeId, properties } = this.state.newPort;
+    this.setState(pState => {
+      const nodes = Object.assign({}, pState.nodes, pState.nodes);
+      const node = nodes[nodeId];
+      const port = {};
+      // const id = uuid.v4();
+      const id = "customPort";
+      port.id = id;
+      port.type = type;
+      port.properties = properties;
+      node.ports[id] = port;
+      nodes[nodeId] = node;
+      return { nodes };
+    });
+  }
+
+  onPortSave() {
+    // validate the data
+    if (this.validatePortData()) {
+      this.createPort();
+    }
+  }
+
+  onPortSelect({ name, value, type }, nodeId) {
+    this.setState(pState => {
+      const newPort = _.cloneDeep(pState.newPort); // Object.assign({}, pState.newPort, pState.newPort);
+      if (name === "properties") {
+        newPort[name][type] = value;
+        console.log(newPort);
+      } else {
+        newPort[name] = value;
+      }
+      if (newPort.nodeId !== nodeId) newPort.nodeId = nodeId;
+      return { newPort };
+    });
+  }
 
   render() {
     const { selected } = this.state;
@@ -204,6 +301,7 @@ export class DragAndDropSidebar extends React.Component {
           <AddPortsToSelectedItem
             selected={selected}
             onChange={this.onPortSelect}
+            onSave={this.onPortSave}
           />
         </Sidebar>
       </Page>
